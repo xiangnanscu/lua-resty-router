@@ -1,7 +1,7 @@
 -- router perform plain or regex match
 local match = ngx.re.match
 
-local version = '1.0'
+local version = '1.1'
 -- http://www.tutorialspoint.com/http/http_methods.htm
 local HTTP_METHODS = {
     GET=true, 
@@ -108,6 +108,8 @@ function Router.add(self, urlpat)
     end
     if path:sub(1, 1) == '~' then 
         table.insert(self.arraylookup, {path:sub(2), controller})
+    elseif path:sub(1, 1) == '^' then 
+        table.insert(self.arraylookup, {path, controller})
     else
         self.hashlookup[path] = controller
     end
