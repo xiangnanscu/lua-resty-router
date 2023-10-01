@@ -1,7 +1,7 @@
 {
   "name": "lua-resty-router",
   "version": "1.0.0",
-  "description": "lua router inspired by javascript router",
+  "description": "high performance router",
   "main": "index.js",
   "scripts": {
     "release": "opm upload && opm clean dist",
@@ -9,7 +9,7 @@
     "push": "yarn commit",
     "postpush": "while true; do git push origin master && { echo 'Git push succeeded'; break; } || echo 'Git push failed, retrying in 1 seconds'; sleep 1; done",
     "pull": "while true; do git pull origin master && { echo 'Git pull succeeded'; break; } || echo 'Git pull failed, retrying in 1 seconds'; sleep 1; done",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "resty test_spec.lua"
   },
   "author": "",
   "license": "ISC"

@@ -1,41 +1,4 @@
-# lua-resty-router
-high performance router
-
-# Router
-
-## create
-
-```lua
----@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
-(method) Router:create(routes: Route[])
-  -> Router
-```
-
-init a router with routes
-
-## insert
-
-
-```lua
-(method) Router:insert(path: string, handler: string|function, methods?: string|string[])
-  -> Router
-```
-insert a route
-## match
-
-
-```lua
-(method) Router:match(path: string, method: string)
-  -> string|function
-  2. { [string]: string|number }?
-```
-
-match a http request
-
-# Synopsis
-
-```lua
-local Router = require('resty.router')
+local Router = require('./resty/router')
 local tree = Router:create {
   { '/',                      'root',    { 'GET', 'patch' } },
   { '/v1',                    'v1',      'GET' },
@@ -71,13 +34,12 @@ assert(res == 'person')
 assert(params.name == 'kate')
 assert(params.age == 23)
 assert(tree:match('/name', 'GET') == 'name')
-```
-Or like this:
-```lua
+
 local tree = Router:new()
 tree:insert('/v1', 'v1')
 tree:post('/v2', 'v2')
-assert(tree:match('/v1','GET') == 'v1')
-assert(tree:match('/v2','POST') == 'v2')
-assert(tree:match('/v2','GET') == nil)
-```
+assert(tree:match('/v1', 'GET') == 'v1')
+assert(tree:match('/v2', 'POST') == 'v2')
+assert(tree:match('/v2', 'GET') == nil)
+
+print('all tests passed')
