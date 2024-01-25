@@ -1,4 +1,4 @@
-local Router = require('./resty/router')
+local Router = require('./lib/resty/router')
 local tree = Router:create {
   { '/',                      'root',    { 'GET', 'patch' } },
   { '/v1',                    'v1',      'GET' },

@@ -1,5 +1,5 @@
 local v1 = require('resty.rax')
-local v2 = require("./resty/router")
+local v2 = require("./lib/resty/router")
 
 local function p(s)
   print(require("resty.inspect")(s))
