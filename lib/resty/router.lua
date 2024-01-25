@@ -53,19 +53,19 @@ local function _set_match_keys(tree)
             return node.children[key]
           end
         end
+      elseif byte(key) == 60 then -- 60 is ASCII value of '<'
+        regex_keys[#regex_keys + 1] = function(node, part, params)
+          local pair_index = key:find('>', 1, true)
+          local m = ngx_re_match(part, key:sub(pair_index + 1), 'josui')
+          if m then
+            params[key:sub(2, pair_index - 1)] = m[0]
+            return node.children[key]
+          end
+        end
       elseif byte(key) == 58 then -- 58 is ASCII value of ':'
         fallback_keys[#fallback_keys + 1] = function(node, part, params)
           params[key:sub(2)] = part
           return node.children[key]
-        end
-      elseif byte(key) == 60 then -- 60 is ASCII value of '<'
-        regex_keys[#regex_keys + 1] = function(node, part, params)
-          local pair_index = key:find('>', 1, true)
-          local re = key:sub(pair_index + 1)
-          if ngx_re_match(part, re, 'josui') then
-            params[key:sub(2, pair_index - 1)] = part
-            return node.children[key]
-          end
         end
       end
       _set_match_keys(child)
@@ -92,10 +92,10 @@ local function _set_match_keys(tree)
   end
 end
 
----@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
+---@alias Route {[1]:string|string[], [2]:function|string, [3]?:string|string[]}
 
 ---@class Router
----@field handler? function|string
+---@field handler function|string|table
 ---@field match_keys? function
 ---@field children? {string:Router}
 ---@field methods? number
@@ -106,26 +106,99 @@ function Router:new()
   return setmetatable({ children = {} }, Router)
 end
 
+function Router:is_handler(handler)
+  if type(handler) == 'function' or type(handler) == 'string' then
+    return true
+  end
+  if type(handler) ~= 'table' then
+    return nil, 'route handler should be a function or string or table, not ' .. type(handler)
+  end
+  local meta = getmetatable(handler)
+  if not meta or not meta.__call then
+    return nil, 'route handler is not a callable table'
+  end
+  return true
+end
+
+function Router:is_route(view)
+  if type(view) ~= 'table' then
+    return nil, "route must be a table"
+  end
+  if type(view[1]) == 'table' then
+    if #view[1] == 0 then
+      return nil, "if the first element of route is a table, it can't be empty"
+    end
+    for _, p in ipairs(view[1]) do
+      if type(p) ~= 'string' then
+        return nil, "the path should be a string, not " .. type(p)
+      end
+    end
+  elseif type(view[1]) ~= 'string' then
+    return nil, 'the first element of route should be a string or table, not ' .. type(view[1])
+  end
+  if view[3] ~= nil then
+    if type(view[3]) == 'string' then
+      if not method_bitmask[view[3]:upper()] then
+        return nil, 'invalid http method: ' .. view[3]
+      end
+    elseif type(view[3]) == 'table' then
+      for _, method in ipairs(view[3]) do
+        if type(method) ~= 'string' then
+          return nil, 'the methods table should contain string only, not ' .. type(method)
+        end
+        if not method_bitmask[method:upper()] then
+          return nil, 'invalid http method: ' .. method
+        end
+      end
+    else
+      return nil, 'the method should be a string or table, not ' .. type(view[3])
+    end
+  end
+  return self:is_handler(view[2])
+end
+
 ---init a router with routes
 ---@param routes Route[]
 ---@return Router
 function Router:create(routes)
   local tree = Router:new()
   for _, route in ipairs(routes) do
-    tree:_insert(route[1], route[2], route[3])
+    assert(self:is_route(route))
+    local path = route[1]
+    if type(path) == 'string' then
+      tree:_insert(path, route[2], route[3])
+    else
+      for _, p in ipairs(path) do
+        tree:_insert(p, route[2], route[3])
+      end
+    end
   end
   _set_match_keys(tree)
   return tree
 end
 
----@param path string
+---@param path string|table
 ---@param handler function|string
 ---@param methods? string|string[]
 ---@return Router
 function Router:insert(path, handler, methods)
-  local node = self:_insert(path, handler, methods)
-  _set_match_keys(node)
-  return node
+  if type(path) == 'table' then
+    if handler == nil then
+      assert(self:is_route(path))
+      return self:insert(unpack(path))
+    else
+      local node
+      for _, p in ipairs(path) do
+        node = self:insert(p, handler, methods)
+      end
+      return node
+    end
+  else
+    assert(self:is_route { path, handler, methods })
+    local node = self:_insert(path, handler, methods)
+    _set_match_keys(node)
+    return node
+  end
 end
 
 function Router:post(path, handler)
@@ -169,7 +242,7 @@ end
 ---match a http request
 ---@param path string
 ---@param method string
----@return function|string, {[string]: string|number}?
+---@return function|string|table, {[string]: string|number}?
 ---@overload fun(string, string): nil, string, number
 function Router:match(path, method)
   local params
@@ -192,6 +265,10 @@ function Router:match(path, method)
         return nil, 'page not found', 404
       end
     end
+  end
+  if not node.handler then
+    -- defined /update/#id, but match /update
+    return nil, 'page not found', 404
   end
   if not node.methods then
     return node.handler, params
