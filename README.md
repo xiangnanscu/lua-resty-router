@@ -1,4 +1,5 @@
 # lua-resty-router
+
 high performance router
 
 # Router
@@ -15,14 +16,14 @@ init a router with routes
 
 ## insert
 
-
 ```lua
 (method) Router:insert(path: string, handler: string|function, methods?: string|string[])
   -> Router
 ```
-insert a route
-## match
 
+insert a route
+
+## match
 
 ```lua
 (method) Router:match(path: string, method: string)
@@ -46,6 +47,7 @@ local tree = Router:create {
   { '/name',                  'name',    'GET' },
   { '/name/:name/age/#age',   'person',  'GET' },
   { '/v2',                    'v2',      'post' },
+  { '/name/:name/path/*path', 'path',    'get' },
 }
 
 local res, err, status = tree:match('/', 'POST')
@@ -71,8 +73,14 @@ assert(res == 'person')
 assert(params.name == 'kate')
 assert(params.age == 23)
 assert(tree:match('/name', 'GET') == 'name')
+local res, params = tree:match('/name/repo/path/lib/bar/foo.js', 'GET')
+assert(res == 'path')
+assert(params.name == 'repo')
+assert(params.path == '/lib/bar/foo.js')
 ```
+
 Or like this:
+
 ```lua
 local tree = Router:new()
 tree:insert('/v1', 'v1')

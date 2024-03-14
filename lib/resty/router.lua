@@ -5,7 +5,6 @@ local ipairs = ipairs
 local tonumber = tonumber
 local byte = string.byte
 
-
 local method_bitmask = {
   GET = 1,       -- 2^0
   POST = 2,      -- 2^1
@@ -20,6 +19,7 @@ local dynamic_sign = {
   [35] = true, --#
   [58] = true, --:
   [60] = true, --<
+  [42] = true, --*
 }
 local function methods_to_bitmask(methods)
   local bitmask = 0
@@ -39,52 +39,60 @@ local function is_static_path(path)
 end
 
 local function _set_match_keys(tree)
-  if tree.children then
-    local keys = {}
-    local number_keys = {}
-    local regex_keys = {}
-    local fallback_keys = {}
-    for key, child in pairs(tree.children) do
-      if byte(key) == 35 then -- 35 is ASCII value of '#'
-        number_keys[#number_keys + 1] = function(node, part, params)
-          local n = tonumber(part)
-          if n then
-            params[key:sub(2)] = n
-            return node.children[key]
-          end
-        end
-      elseif byte(key) == 60 then -- 60 is ASCII value of '<'
-        regex_keys[#regex_keys + 1] = function(node, part, params)
-          local pair_index = key:find('>', 1, true)
-          local m = ngx_re_match(part, key:sub(pair_index + 1), 'josui')
-          if m then
-            params[key:sub(2, pair_index - 1)] = m[0]
-            return node.children[key]
-          end
-        end
-      elseif byte(key) == 58 then -- 58 is ASCII value of ':'
-        fallback_keys[#fallback_keys + 1] = function(node, part, params)
-          params[key:sub(2)] = part
+  if not tree.children then
+    return
+  end
+  local keys = {}
+  local number_keys = {}
+  local regex_keys = {}
+  local fallback_keys = {}
+
+  for key, child in pairs(tree.children) do
+    if byte(key) == 35 then -- 35 is ASCII value of '#'
+      number_keys[#number_keys + 1] = function(node, part, params)
+        local n = tonumber(part)
+        if n then
+          params[key:sub(2)] = n
           return node.children[key]
         end
       end
-      _set_match_keys(child)
-    end
-    for _, groups in ipairs({ number_keys, regex_keys, fallback_keys }) do
-      for _, key in ipairs(groups) do
-        keys[#keys + 1] = key
+    elseif byte(key) == 60 then -- 60 is ASCII value of '<'
+      regex_keys[#regex_keys + 1] = function(node, part, params)
+        local pair_index = key:find('>', 1, true)
+        local m = ngx_re_match(part, key:sub(pair_index + 1), 'josui')
+        if m then
+          params[key:sub(2, pair_index - 1)] = m[0]
+          return node.children[key]
+        end
+      end
+    elseif byte(key) == 58 then -- 58 is ASCII value of ':'
+      fallback_keys[#fallback_keys + 1] = function(node, part, params)
+        params[key:sub(2)] = part
+        return node.children[key]
+      end
+    elseif byte(key) == 42 then -- 42 is ASCII value of '*'
+      tree.match_rest = true
+      fallback_keys[#fallback_keys + 1] = function(node, part, params)
+        params[key:sub(2)] = part
+        return node.children[key]
       end
     end
-    if #keys > 0 then
-      if #keys == 1 then
-        tree.match_keys = keys[1]
-      else
-        tree.match_keys = function(node, part, params)
-          for _, func in ipairs(keys) do
-            local child = func(node, part, params)
-            if child then
-              return child
-            end
+    _set_match_keys(child)
+  end
+  for _, groups in ipairs({ number_keys, regex_keys, fallback_keys }) do
+    for _, key in ipairs(groups) do
+      keys[#keys + 1] = key
+    end
+  end
+  if #keys > 0 then
+    if #keys == 1 then
+      tree.match_keys = keys[1]
+    else
+      tree.match_keys = function(node, part, params)
+        for _, func in ipairs(keys) do
+          local child = func(node, part, params)
+          if child then
+            return child
           end
         end
       end
@@ -99,6 +107,7 @@ end
 ---@field match_keys? function
 ---@field children? {string:Router}
 ---@field methods? number
+---@field match_rest? boolean
 local Router = {}
 Router.__index = Router
 
@@ -196,7 +205,7 @@ function Router:insert(path, handler, methods)
   else
     assert(self:is_route { path, handler, methods })
     local node = self:_insert(path, handler, methods)
-    _set_match_keys(node)
+    _set_match_keys(self)
     return node
   end
 end
@@ -219,8 +228,11 @@ function Router:_insert(path, handler, methods)
     node[path] = {}
     node = node[path]
   else
-    -- / => empty, /foo => {"foo"}, /foo/ => {"foo"}
+    local parts = {}
     for part in gmatch(path, "[^/]+") do
+      parts[#parts + 1] = part
+    end
+    for i, part in ipairs(parts) do
       if not node.children then
         node.children = {}
       end
@@ -228,6 +240,11 @@ function Router:_insert(path, handler, methods)
         node.children[part] = {}
       end
       node = node.children[part]
+      -- 检查是否是 '*' 通配符
+      if part:sub(1, 1) == '*' then
+        assert(i == #parts, 'Catch-all routes are only supported as the last part of the path')
+        break
+      end
     end
   end
   node.handler = assert(handler, 'you must provide a handler')
@@ -250,6 +267,7 @@ function Router:match(path, method)
   local node = self[path]
   if not node then
     node = self
+    local cut = 1
     for part in gmatch(path, "[^/]+") do
       if node.children and node.children[part] then
         node = node.children[part]
@@ -257,13 +275,23 @@ function Router:match(path, method)
         if not params then
           params = {}
         end
-        node = node:match_keys(part, params)
-        if not node then
-          return nil, 'page not found', 404
+        if not node.match_rest then
+          node = node:match_keys(part, params)
+          if not node then
+            return nil, 'page not found', 404
+          end
+        else
+          node = node:match_keys(path:sub(cut), params)
+          if not node then
+            return nil, 'page not found', 404
+          else
+            break
+          end
         end
       else
         return nil, 'page not found', 404
       end
+      cut = cut + #part + 1
     end
   end
   if not node.handler then
