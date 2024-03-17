@@ -38,16 +38,21 @@ local function is_static_path(path)
   return true
 end
 
-local function _set_match_keys(tree)
+local function _set_match_methods(tree)
   if not tree.children then
     return
   end
-  local keys = {}
+  local methods = {}
+  -- group keys for matching priority, i.e: /v1/#age, /v1/<version>\\d+-\\d+, /v1/:name, /v1/*path
+  local number_methods = {}
+  local regex_methods = {}
+  local char_methods = {}
+  local fallback_methods = {}
   for key, child in pairs(tree.children) do
     local pkey = key:sub(2)
     local bkey = byte(key)
     if bkey == 35 then -- 35 is ASCII value of '#'
-      keys[#keys + 1] = function(node, part, params)
+      number_methods[#number_methods + 1] = function(node, part, params)
         local n = tonumber(part)
         if n then
           params[pkey] = n
@@ -58,7 +63,7 @@ local function _set_match_keys(tree)
       local pair_index = key:find('>', 1, true)
       local regex = key:sub(pair_index + 1)
       local regex_key = key:sub(2, pair_index - 1)
-      keys[#keys + 1] = function(node, part, params)
+      regex_methods[#regex_methods + 1] = function(node, part, params)
         local m = ngx_re_match(part, regex, 'josui')
         if m then
           params[regex_key] = m[0]
@@ -66,25 +71,30 @@ local function _set_match_keys(tree)
         end
       end
     elseif bkey == 58 then -- 58 is ASCII value of ':'
-      keys[#keys + 1] = function(node, part, params)
+      char_methods[#char_methods + 1] = function(node, part, params)
         params[pkey] = part
         return node.children[key]
       end
     elseif bkey == 42 then -- 42 is ASCII value of '*'
       tree.match_rest = true
-      keys[#keys + 1] = function(node, part, params)
+      fallback_methods[#fallback_methods + 1] = function(node, part, params)
         params[pkey] = part
         return node.children[key]
       end
     end
-    _set_match_keys(child)
+    _set_match_methods(child)
   end
-  if #keys > 0 then
-    if #keys == 1 then
-      tree.match_keys = keys[1]
+  for _, groups in ipairs({ number_methods, regex_methods, char_methods, fallback_methods }) do
+    for _, key in ipairs(groups) do
+      methods[#methods + 1] = key
+    end
+  end
+  if #methods > 0 then
+    if #methods == 1 then
+      tree.match_keys = methods[1]
     else
       tree.match_keys = function(node, part, params)
-        for _, func in ipairs(keys) do
+        for _, func in ipairs(methods) do
           local child = func(node, part, params)
           if child then
             return child
@@ -177,7 +187,7 @@ function Router:create(routes)
       end
     end
   end
-  _set_match_keys(tree)
+  _set_match_methods(tree)
   return tree
 end
 
@@ -200,7 +210,7 @@ function Router:insert(path, handler, methods)
   else
     assert(self:is_route { path, handler, methods })
     local node = self:_insert(path, handler, methods)
-    _set_match_keys(self)
+    _set_match_methods(self)
     return node
   end
 end
