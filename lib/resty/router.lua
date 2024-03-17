@@ -43,46 +43,41 @@ local function _set_match_keys(tree)
     return
   end
   local keys = {}
-  local number_keys = {}
-  local regex_keys = {}
-  local fallback_keys = {}
-
   for key, child in pairs(tree.children) do
-    if byte(key) == 35 then -- 35 is ASCII value of '#'
-      number_keys[#number_keys + 1] = function(node, part, params)
+    local pkey = key:sub(2)
+    local bkey = byte(key)
+    if bkey == 35 then -- 35 is ASCII value of '#'
+      keys[#keys + 1] = function(node, part, params)
         local n = tonumber(part)
         if n then
-          params[key:sub(2)] = n
+          params[pkey] = n
           return node.children[key]
         end
       end
-    elseif byte(key) == 60 then -- 60 is ASCII value of '<'
-      regex_keys[#regex_keys + 1] = function(node, part, params)
-        local pair_index = key:find('>', 1, true)
-        local m = ngx_re_match(part, key:sub(pair_index + 1), 'josui')
+    elseif bkey == 60 then -- 60 is ASCII value of '<'
+      local pair_index = key:find('>', 1, true)
+      local regex = key:sub(pair_index + 1)
+      local regex_key = key:sub(2, pair_index - 1)
+      keys[#keys + 1] = function(node, part, params)
+        local m = ngx_re_match(part, regex, 'josui')
         if m then
-          params[key:sub(2, pair_index - 1)] = m[0]
+          params[regex_key] = m[0]
           return node.children[key]
         end
       end
-    elseif byte(key) == 58 then -- 58 is ASCII value of ':'
-      fallback_keys[#fallback_keys + 1] = function(node, part, params)
-        params[key:sub(2)] = part
+    elseif bkey == 58 then -- 58 is ASCII value of ':'
+      keys[#keys + 1] = function(node, part, params)
+        params[pkey] = part
         return node.children[key]
       end
-    elseif byte(key) == 42 then -- 42 is ASCII value of '*'
+    elseif bkey == 42 then -- 42 is ASCII value of '*'
       tree.match_rest = true
-      fallback_keys[#fallback_keys + 1] = function(node, part, params)
-        params[key:sub(2)] = part
+      keys[#keys + 1] = function(node, part, params)
+        params[pkey] = part
         return node.children[key]
       end
     end
     _set_match_keys(child)
-  end
-  for _, groups in ipairs({ number_keys, regex_keys, fallback_keys }) do
-    for _, key in ipairs(groups) do
-      keys[#keys + 1] = key
-    end
   end
   if #keys > 0 then
     if #keys == 1 then
