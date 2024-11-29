@@ -331,7 +331,7 @@ end
 
 ---@return table
 function Router:create_context()
-  return { yield = coroutine.yield }
+  return setmetatable({ yield = coroutine.yield }, ngx.req)
 end
 
 ---@param path string
@@ -349,25 +349,43 @@ function Router:dispatch(path, method)
     ctx.params = params_or_code
   end
 
-  local co_list = {}
+  ctx._post_plugin_coroutines = {}
+  local co_list = ctx._post_plugin_coroutines
 
   for _, plugin in ipairs(self.plugins) do
-    table.insert(co_list, coroutine.create(function()
+    local co = coroutine.create(function()
       plugin(ctx)
-    end))
+    end)
+
+    local ok, err = coroutine.resume(co)
+    if not ok then
+      return self:fail(err)
+    end
+
+    if coroutine.status(co) == "suspended" then
+      co_list[#co_list + 1] = co
+    end
   end
 
-  for _, co in ipairs(co_list) do
-    coroutine.resume(co)
+  local ok, result, err
+  if type(handler) == 'string' then
+    result = handler
+  else
+    ok, result, err = pcall(handler, ctx)
+    if not ok then
+      return self:fail(result)
+    elseif result == nil then
+      return self:fail(err)
+    end
   end
-
-  local result = handler(ctx)
 
   for i = #co_list, 1, -1 do
     local co = co_list[i]
-    if coroutine.status(co) == "suspended" then
-      coroutine.resume(co)
+    local ok, err = coroutine.resume(co)
+    if not ok then
+      self:silent_fail(err)
     end
+    co_list[i] = nil
   end
 
   return result

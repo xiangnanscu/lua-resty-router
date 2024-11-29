@@ -52,7 +52,7 @@ assert(tree:match('/v2', 'GET') == nil)
 router:use(function(ctx)
   print("M1 Before request")
   ctx.time = ngx.now()
-  error("M1 error")
+  -- error("M1 error")
   ctx.yield()
   print("M1 After request")
 end)
@@ -68,7 +68,7 @@ end)
 
 -- 添加路由
 router:get("/hello", function(ctx)
-  return "Hello World：" .. ctx.time
+  return nil, "Hello World：" .. ctx.time
 end)
 
 -- 运行路由
