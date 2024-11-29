@@ -1,9 +1,9 @@
 local bit = bit
-local ngx_re_match = ngx.re.match
 local gmatch = string.gmatch
 local ipairs = ipairs
 local tonumber = tonumber
 local byte = string.byte
+local ngx_re_match = ngx.re.match
 
 local method_bitmask = {
   GET = 1,       -- 2^0
@@ -38,7 +38,7 @@ local function is_static_path(path)
   return true
 end
 
-local function _set_match_methods(tree)
+local function _set_find_method(tree)
   if not tree.children then
     return
   end
@@ -49,13 +49,12 @@ local function _set_match_methods(tree)
   local char_methods = {}
   local fallback_methods = {}
   for key, child in pairs(tree.children) do
-    local pkey = key:sub(2)
     local bkey = byte(key)
     if bkey == 35 then -- 35 is ASCII value of '#'
       number_methods[#number_methods + 1] = function(node, part, params)
         local n = tonumber(part)
         if n then
-          params[pkey] = n
+          params[key:sub(2)] = n
           return node.children[key]
         end
       end
@@ -72,17 +71,17 @@ local function _set_match_methods(tree)
       end
     elseif bkey == 58 then -- 58 is ASCII value of ':'
       char_methods[#char_methods + 1] = function(node, part, params)
-        params[pkey] = part
+        params[key:sub(2)] = part
         return node.children[key]
       end
     elseif bkey == 42 then -- 42 is ASCII value of '*'
       tree.match_rest = true
       fallback_methods[#fallback_methods + 1] = function(node, part, params)
-        params[pkey] = part
+        params[key:sub(2)] = part
         return node.children[key]
       end
     end
-    _set_match_methods(child)
+    _set_find_method(child)
   end
   for _, groups in ipairs({ number_methods, regex_methods, char_methods, fallback_methods }) do
     for _, key in ipairs(groups) do
@@ -91,9 +90,9 @@ local function _set_match_methods(tree)
   end
   if #methods > 0 then
     if #methods == 1 then
-      tree.match_keys = methods[1]
+      tree._find = methods[1]
     else
-      tree.match_keys = function(node, part, params)
+      tree._find = function(node, part, params)
         for _, func in ipairs(methods) do
           local child = func(node, part, params)
           if child then
@@ -108,16 +107,26 @@ end
 ---@alias Route {[1]:string|string[], [2]:function|string, [3]?:string|string[]}
 
 ---@class Router
----@field handler function|string|table
----@field match_keys? function
----@field children? {string:Router}
----@field methods? number
----@field match_rest? boolean
-local Router = {}
+---@field private handler function|string|table
+---@field private _find? function
+---@field private children? {string:Router}
+---@field private methods? number
+---@field private match_rest? boolean
+---@field private plugins? function[]
+---@field private __index Router
+---@field get fun(self:Router, path:string|table, handler:function|string): Router
+---@field post fun(self:Router, path:string|table, handler:function|string): Router
+---@field patch fun(self:Router, path:string|table, handler:function|string): Router
+---@field put fun(self:Router, path:string|table, handler:function|string): Router
+---@field delete fun(self:Router, path:string|table, handler:function|string): Router
+---@field head fun(self:Router, path:string|table, handler:function|string): Router
+---@field options fun(self:Router, path:string|table, handler:function|string): Router
+---@field connect fun(self:Router, path:string|table, handler:function|string): Router
+local Router = { method_bitmask = method_bitmask }
 Router.__index = Router
 
 function Router:new()
-  return setmetatable({ children = {} }, Router)
+  return setmetatable({ children = {}, plugins = {} }, Router)
 end
 
 function Router:is_handler(handler)
@@ -140,7 +149,7 @@ function Router:is_route(view)
   end
   if type(view[1]) == 'table' then
     if #view[1] == 0 then
-      return nil, "if the first element of route is a table, it can't be empty"
+      return nil, "the first element of route is a table can't be empty"
     end
     for _, p in ipairs(view[1]) do
       if type(p) ~= 'string' then
@@ -158,14 +167,14 @@ function Router:is_route(view)
     elseif type(view[3]) == 'table' then
       for _, method in ipairs(view[3]) do
         if type(method) ~= 'string' then
-          return nil, 'the methods table should contain string only, not ' .. type(method)
+          return nil, 'the method should be string only, not ' .. type(method)
         end
         if not method_bitmask[method:upper()] then
           return nil, 'invalid http method: ' .. method
         end
       end
     else
-      return nil, 'the method should be a string or table, not ' .. type(view[3])
+      return nil, 'the method argument should be a string or table, not ' .. type(view[3])
     end
   end
   return self:is_handler(view[2])
@@ -187,7 +196,7 @@ function Router:create(routes)
       end
     end
   end
-  _set_match_methods(tree)
+  _set_find_method(tree)
   return tree
 end
 
@@ -210,19 +219,12 @@ function Router:insert(path, handler, methods)
   else
     assert(self:is_route { path, handler, methods })
     local node = self:_insert(path, handler, methods)
-    _set_match_methods(self)
+    _set_find_method(self)
     return node
   end
 end
 
-function Router:post(path, handler)
-  return self:insert(path, handler, 'post')
-end
-
-function Router:get(path, handler)
-  return self:insert(path, handler, 'GET')
-end
-
+---@private
 ---@param path string
 ---@param handler function|string
 ---@param methods? string|string[]
@@ -242,11 +244,11 @@ function Router:_insert(path, handler, methods)
         node.children = {}
       end
       if not node.children[part] then
+        ---@diagnostic disable-next-line: missing-fields
         node.children[part] = {}
       end
       node = node.children[part]
-      -- 检查是否是 '*' 通配符
-      if part:sub(1, 1) == '*' then
+      if byte(part) == 42 then -- 42 is ASCII value of '*'
         assert(i == #parts, 'Catch-all routes are only supported as the last part of the path')
         break
       end
@@ -265,7 +267,7 @@ end
 ---@param path string
 ---@param method string
 ---@return function|string|table, {[string]: string|number}?
----@overload fun(string, string): nil, string, number
+---@overload fun(string, string): nil, number
 function Router:match(path, method)
   local params
   -- first try static match
@@ -276,32 +278,32 @@ function Router:match(path, method)
     for part in gmatch(path, "[^/]+") do
       if node.children and node.children[part] then
         node = node.children[part]
-      elseif node.match_keys then
+      elseif node._find then
         if not params then
           params = {}
         end
         if not node.match_rest then
-          node = node:match_keys(part, params)
+          node = node:_find(part, params)
           if not node then
-            return nil, 'page not found', 404
+            return nil, 404
           end
         else
-          node = node:match_keys(path:sub(cut), params)
+          node = node:_find(path:sub(cut), params)
           if not node then
-            return nil, 'page not found', 404
+            return nil, 404
           else
             break
           end
         end
       else
-        return nil, 'page not found', 404
+        return nil, 404
       end
       cut = cut + #part + 1
     end
   end
   if not node.handler then
     -- defined /update/#id, but match /update
-    return nil, 'page not found', 404
+    return nil, 404
   end
   if not node.methods then
     return node.handler, params
@@ -310,8 +312,65 @@ function Router:match(path, method)
   if bit.band(node.methods, method_bit) ~= 0 then
     return node.handler, params
   else
-    return nil, 'method not allowed', 405
+    return nil, 405
   end
+end
+
+for method, _ in pairs(method_bitmask) do
+  ---@diagnostic disable-next-line: assign-type-mismatch
+  Router[method:lower()] = function(self, path, handler)
+    return self:insert(path, handler, method)
+  end
+end
+
+---@param plugin function
+function Router:use(plugin)
+  assert(type(plugin) == 'function', "plugin must be a function")
+  table.insert(self.plugins, plugin)
+end
+
+---@return table
+function Router:create_context()
+  return { yield = coroutine.yield }
+end
+
+---@param path string
+---@param method string
+---@return function|string|table, {[string]: string|number}?
+---@overload fun(string, string): nil, number
+function Router:dispatch(path, method)
+  local handler, params_or_code = self:match(path, method)
+  if not handler then
+    return nil, params_or_code
+  end
+
+  local ctx = self:create_context()
+  if params_or_code then
+    ctx.params = params_or_code
+  end
+
+  local co_list = {}
+
+  for _, plugin in ipairs(self.plugins) do
+    table.insert(co_list, coroutine.create(function()
+      plugin(ctx)
+    end))
+  end
+
+  for _, co in ipairs(co_list) do
+    coroutine.resume(co)
+  end
+
+  local result = handler(ctx)
+
+  for i = #co_list, 1, -1 do
+    local co = co_list[i]
+    if coroutine.status(co) == "suspended" then
+      coroutine.resume(co)
+    end
+  end
+
+  return result
 end
 
 return Router
