@@ -1,0 +1,19 @@
+{
+  "name": "lua-resty-router project",
+  "version": "1.0.0",
+  "description": "project template for lua-resty-router",
+  "scripts": {
+    "commit": "git add . && git commit -am ",
+    "c": "yarn commit",
+    "g": "yarn push",
+    "push": "yarn commit",
+    "_push": "git push origin",
+    "_pull": "git pull origin",
+    "postpush": "uname -s | grep -q Darwin && yarn _push || while true; do timeout 10 yarn _push && break; done",
+    "pull": "uname -s | grep -q Darwin && yarn _pull || while true; do timeout 10 yarn _pull && break; done",
+    "nginx": "nginx -c conf/nginx.conf -p .",
+    "start": "yarn nginx",
+    "stop": "yarn nginx -s stop",
+    "reload": "yarn nginx -s reload"
+  }
+}

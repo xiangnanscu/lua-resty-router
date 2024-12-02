@@ -1,6 +1,6 @@
 # lua-resty-router
 
-high performance router
+High performance and productive router for Openresty.
 
 # Router
 

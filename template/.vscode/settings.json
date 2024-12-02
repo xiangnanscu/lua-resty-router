@@ -10,9 +10,6 @@
     "${3rd}/busted/library",
     "${3rd}/OpenResty/library"
   ],
-  "Lua.workspace.ignoreDir": [
-    "template"
-  ],
   "Lua.typeFormat.config": {
     "format_line": "false",
     "auto_complete_end": "false",

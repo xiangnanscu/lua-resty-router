@@ -67,10 +67,14 @@ router:use(function(ctx)
 end)
 
 -- 添加路由
-router:get("/hello", function(ctx)
-  return nil, "Hello World：" .. ctx.time
-end)
-
+-- router:get("/hello", function(ctx)
+--   return "Hello World：" .. ctx.time
+-- end)
+router:get("/hello", setmetatable({ time = 1 }, {
+  __call = function(_, ctx)
+    return "Hello World111：" .. ngx.ERR
+  end
+}))
 -- 运行路由
 local result = router:dispatch("/hello", "GET")
 print(result)
