@@ -1,6 +1,6 @@
 # lua-resty-router
 
-High performance and productive router for Openresty.
+Elegant, performant and productive router for Openresty.
 
 # Router
 
@@ -98,3 +98,7 @@ assert(tree:match('/v1','GET') == 'v1')
 assert(tree:match('/v2','POST') == 'v2')
 assert(tree:match('/v2','GET') == nil)
 ```
+
+## reference
+
+- [nginx api for lua](https://github.com/openresty/lua-nginx-module?tab=readme-ov-file#nginx-api-for-lua)
