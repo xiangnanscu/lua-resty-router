@@ -10,11 +10,11 @@ end)
 
 -- 测试事件
 router:on('success', function(ctx)
-  ngx.log(ngx.INFO, "请求成功")
+  -- ngx.log(ngx.INFO, "请求成功")
 end)
 
 router:on('error', function(ctx)
-  ngx.log(ngx.INFO, "请求失败")
+  -- ngx.log(ngx.INFO, "请求失败")
 end)
 
 -- 1. 测试静态路径
@@ -57,11 +57,11 @@ router:get("/files/*path", function(ctx)
 end)
 
 -- 6. 测试多个HTTP方法
-router:post("/users", function(ctx)
+router:post("/accounts", function(ctx)
   return { method = "POST" }
 end)
 
-router:put("/users/#id", function(ctx)
+router:put("/accounts/#id", function(ctx)
   return { method = "PUT", id = ctx.params.id }
 end)
 
@@ -87,5 +87,5 @@ router:get("/func", function()
     return true
   end
 end)
-
+ngx.log(ngx.ERR, require("resty.repr")(router))
 return router

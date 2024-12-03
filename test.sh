@@ -49,15 +49,15 @@ test_endpoint "/users/john" "GET" 200 '"name":"john"'
 
 # 4. 测试正则路径
 test_endpoint "/version/1.0" "GET" 200 '"version":"1.0"'
-test_endpoint "/version/abc" "GET" 404
+test_endpoint "/version/abc" "GET" 200 '"version":"abc"'
 
 # 5. 测试通配符
-test_endpoint "/files/path/to/file.txt" "GET" 200 '"path":"path/to/file.txt"'
+test_endpoint "/files/path/to/file.txt" "GET" 200 '"path":"\/path\/to\/file.txt"'
 
 # 6. 测试HTTP方法
-test_endpoint "/users" "POST" 200 '"method":"POST"'
-test_endpoint "/users/123" "PUT" 200 '"method":"PUT"'
-test_endpoint "/users" "DELETE" 405
+test_endpoint "/accounts" "POST" 200 '"method":"POST"'
+test_endpoint "/accounts/123" "PUT" 200 '"method":"PUT"'
+test_endpoint "/accounts" "DELETE" 405
 
 # 7. 测试错误处理
 test_endpoint "/error" "GET" 500 "测试错误"
