@@ -2,41 +2,40 @@ local Router = require('resty.router')
 
 local router = Router:new()
 
-local success_cnt = 0
+local cnt = 0
 local error_cnt = 0
 
-
--- 测试事件
-router:on('success', function(ctx)
-  success_cnt = success_cnt + 1
+-- Test events
+router:on('add', function(ctx)
+  cnt = cnt + 1
 end)
 
 router:on('error', function(ctx)
   error_cnt = error_cnt + 1
 end)
 
--- 测试插件
+-- Test plugins
 router:use(function(ctx)
-  ctx.success_cnt = success_cnt
+  ctx.cnt = cnt
   ctx.error_cnt = error_cnt
 end)
 
--- 1. 测试静态路径
+-- 1. Test static path
 router:get("/hello", function()
   return "Hello World"
 end)
 
--- 测试自定义成功状态码
+-- Test custom success status code
 router:get("/hello-201", function()
   return "Hello World", 201
 end)
 
--- 2. 测试JSON响应
+-- 2. Test JSON response
 router:get("/json", function()
   return { message = "success", code = 0 }
 end)
 
--- 3. 测试动态路径参数
+-- 3. Test dynamic path parameters
 router:get("/users/#id", function(ctx)
   return {
     id = ctx.params.id,
@@ -51,19 +50,19 @@ router:get("/users/:name", function(ctx)
   }
 end)
 
--- 4. 测试正则路径
+-- 4. Test regex path
 router:get([[/version/<ver>\d+\.\d+]], function(ctx)
   return {
     version = ctx.params.ver
   }
 end)
 
--- 5. 测试通配符
+-- 5. Test wildcard
 router:get("/files/*path", function(ctx)
   return ctx.params.path
 end)
 
--- 6. 测试其他HTTP方法
+-- 6. Test other HTTP methods
 router:post("/accounts", function(ctx)
   return { method = "POST" }
 end)
@@ -72,45 +71,45 @@ router:put("/accounts/#id", function(ctx)
   return { method = "PUT", id = ctx.params.id }
 end)
 
--- 7. 测试错误处理
+-- 7. Test error handling
 router:get("/error", function()
-  error("测试错误")
+  error("Test Error")
 end)
 
--- 测试error抛出的自定义错误
+-- Test custom error thrown by error()
 router:get("/custom-error", function()
-  error({ code = 400, message = "自定义错误" })
+  error({ code = 400, message = "Custom Error" })
 end)
 
--- 测试return nil, err, code形式的错误
+-- Test error in the form of return nil, err, code
 router:get("/return-error", function()
-  return nil, "参数错误", 402
+  return nil, "Parameter Error", 402
 end)
 
--- 测试handled error
+-- Test handled error
 router:get("/handled-error", function()
   error { "handled error" }
 end)
 
--- 8. 测试状态码
+-- 8. Test status code
 router:get("/404", function()
   return nil, "Not Found", 404
 end)
 
--- 9. 测试HTML响应
+-- 9. Test HTML response
 router:get("/html", function()
   return "<h1>Hello HTML</h1>"
 end)
--- 测试html错误
+-- Test HTML error
 router:get("/html-error", function()
   return nil, "<h1>Hello HTML error</h1>", 501
 end)
--- 测试error抛出的html错误
+-- Test HTML error thrown by error()
 router:get("/html-error2", function()
   error { "<h1>Hello HTML error2</h1>" }
 end)
 
--- 10. 测试函数返回
+-- 10. Test function return
 router:get("/func", function(ctx)
   return function()
     ngx.header.content_type = 'text/plain; charset=utf-8'
@@ -118,13 +117,14 @@ router:get("/func", function(ctx)
   end
 end)
 
--- 11. 查看events是否正常执行
-router:get("/events", function(ctx)
-  return {
-    success_cnt = ctx.success_cnt,
-    error_cnt = ctx.error_cnt
-  }
+-- 11. Check if events are executing properly
+router:get("/add", function(ctx)
+  cnt = cnt + 1
+  return cnt
 end)
 
--- ngx.log(ngx.ERR, require("resty.repr")(router))
+router:get("/events", function(ctx)
+  return ctx.cnt
+end)
+
 return router

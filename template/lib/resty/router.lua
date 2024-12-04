@@ -1,9 +1,29 @@
-local bit = bit
-local gmatch = string.gmatch
-local ipairs = ipairs
-local tonumber = tonumber
-local byte = string.byte
-local ngx_re_match = ngx.re.match
+local json           = require "cjson.safe"
+local bit            = bit
+local gmatch         = string.gmatch
+local ipairs         = ipairs
+local tonumber       = tonumber
+local byte           = string.byte
+local ngx_re_match   = ngx.re.match
+local coroutine      = coroutine
+local resume         = coroutine.resume
+local trace_back     = debug.traceback
+local ngx            = ngx
+local ngx_header     = ngx.header
+local ngx_print      = ngx.print
+local ngx_var        = ngx.var
+local string_format  = string.format
+local xpcall         = xpcall
+local spawn          = ngx.thread.spawn
+local ngx_req        = ngx.req
+local decode         = json.decode
+local encode         = json.encode
+local get_post_args  = ngx.req.get_post_args
+local read_body      = ngx.req.read_body
+local get_body_data  = ngx.req.get_body_data
+local assert         = assert
+local rawget         = rawget
+local setmetatable   = setmetatable
 
 local method_bitmask = {
   GET = 1,       -- 2^0
@@ -15,7 +35,7 @@ local method_bitmask = {
   OPTIONS = 64,  -- 2^6
   CONNECT = 128, -- 2^7
 }
-local dynamic_sign = {
+local dynamic_sign   = {
   [35] = true, --#
   [58] = true, --:
   [60] = true, --<
@@ -112,7 +132,8 @@ end
 ---@field private children? {string:Router}
 ---@field private methods? number
 ---@field private match_rest? boolean
----@field private plugins? function[]
+---@field private plugins function[]
+---@field private events {string:function}
 ---@field private __index Router
 ---@field get fun(self:Router, path:string|table, handler:function|string|table): Router
 ---@field post fun(self:Router, path:string|table, handler:function|string|table): Router
@@ -126,7 +147,7 @@ local Router = { method_bitmask = method_bitmask }
 Router.__index = Router
 
 function Router:new()
-  return setmetatable({ children = {}, plugins = {} }, Router)
+  return setmetatable({ children = {}, plugins = {}, events = {} }, Router)
 end
 
 function Router:is_handler(handler)
@@ -326,72 +347,227 @@ end
 ---@param plugin function
 function Router:use(plugin)
   assert(type(plugin) == 'function', "plugin must be a function")
-  table.insert(self.plugins, plugin)
+  self.plugins[#self.plugins + 1] = plugin
+end
+
+function Router:on(event_key, handler)
+  self.events[event_key] = handler
+end
+
+function Router:emit(event_key, ...)
+  if self.events and self.events[event_key] then
+    return spawn(self.events[event_key], ...)
+  end
+end
+
+local Response = {
+  header = ngx_header,
+  get_headers = ngx_req.get_headers,
+}
+Response.__index = Response
+
+local Context = {
+  yield = coroutine.yield
+}
+---@private
+function Context.__index(self, key)
+  if Context[key] ~= nil then
+    return Context[key]
+  elseif ngx_req[key] ~= nil then
+    return ngx_req[key]
+  elseif key == 'response' then
+    self.response = setmetatable({}, Response)
+    return self.response
+  elseif key == 'query' then
+    self.query = ngx_req.get_uri_args()
+    return rawget(self, 'query')
+  else
+    return nil
+  end
 end
 
 ---@return table
 function Router:create_context()
-  return setmetatable({ yield = coroutine.yield }, ngx.req)
+  return setmetatable({}, Context)
 end
 
 ---@param path string
 ---@param method string
----@return function|string|table, {[string]: string|number}?
----@overload fun(string, string): nil, number
+---@return boolean
 function Router:dispatch(path, method)
-  local handler, params_or_code = self:match(path, method)
-  if not handler then
-    return self:fail(params_or_code)
-  end
-
+  -- before plugins
   local ctx = self:create_context()
-  if params_or_code then
-    ctx.params = params_or_code
-  end
-
-  ctx._post_plugin_coroutines = {}
-  local co_list = ctx._post_plugin_coroutines
-
   for _, plugin in ipairs(self.plugins) do
     local co = coroutine.create(function()
       plugin(ctx)
     end)
-
-    local ok, err = coroutine.resume(co)
+    local ok, err = resume(co)
     if not ok then
-      return self:fail(err)
+      return self:fail(ctx, err)
     end
-
     if coroutine.status(co) == "suspended" then
-      co_list[#co_list + 1] = co
+      ctx[#ctx + 1] = co
     end
   end
-
-  local ok, result, err
+  -- match route
+  local handler, params_or_code = self:match(path, method)
+  if handler == nil then
+    return self:echo(ctx, 'match route failed', params_or_code --[[@as number]])
+  end
+  if params_or_code then
+    ctx.params = params_or_code
+  end
   if type(handler) == 'string' then
-    result = handler
+    return self:echo(ctx, handler, 200)
   else
     ---@diagnostic disable-next-line: param-type-mismatch
-    ok, result, err = pcall(handler, ctx)
+    local ok, result, err_or_okcode, errcode = xpcall(handler, trace_back, ctx)
     if not ok then
-      self:fail(result)
+      return self:fail(ctx, result)
     elseif result == nil then
-      self:fail(err)
+      if err_or_okcode ~= nil then
+        return self:fail(ctx, err_or_okcode, errcode)
+      elseif rawget(ctx, 'response') then
+        local code = ctx.response.status or 200
+        return self:echo(ctx, ctx.response.body, code)
+      else
+        return self:echo(ctx, 'no response', 500)
+      end
+    elseif type(result) ~= 'function' then
+      return self:echo(ctx, result, err_or_okcode or 200)
+    else
+      ok, result = xpcall(result, trace_back, ctx)
+      if not ok then
+        return self:fail(ctx, result)
+      else
+        return self:finish(ctx, 200, ngx.exit, 0)
+      end
     end
   end
-
-  for i = #co_list, 1, -1 do
-    local co = co_list[i]
-    coroutine.resume(co)
-    co_list[i] = nil
-  end
-
-  return result
 end
 
-function Router:fail(err, code)
-  ngx.say(err)
-  return ngx.exit(code or 500)
+---success response
+---@param ctx table request context
+---@param body string response body
+---@param code number response code
+---@return unknown
+function Router:echo(ctx, body, code)
+  ngx.status = code
+  local res, err = self:print(body)
+  if res == nil then
+    return self:fail(ctx, err)
+  else
+    return self:finish(ctx, code, ngx.exit, 0)
+  end
+end
+
+---failed response
+---@param ctx table request context
+---@param err string|table error message
+---@param code? number error code
+---@return unknown
+function Router:fail(ctx, err, code)
+  code = code or 500
+  ngx.status = code
+  self:print_error(err)
+  return self:finish(ctx, code, ngx.exit, 0)
+end
+
+function Router:print(body)
+  if type(body) == 'string' then
+    if not ngx_header.content_type then
+      if byte(body) == 60 then -- 60 is ASCII value of '<'
+        ngx_header.content_type = 'text/html; charset=utf-8'
+      else
+        ngx_header.content_type = 'text/plain; charset=utf-8'
+      end
+    end
+    return ngx_print(body)
+  elseif type(body) == 'number' or type(body) == 'boolean' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'application/json; charset=utf-8'
+    end
+    local t, e = encode(body)
+    if t then
+      return ngx_print(t)
+    else
+      return nil, e
+    end
+  elseif type(body) == 'table' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'application/json; charset=utf-8'
+    end
+    local t, e = encode(body)
+    if t then
+      return ngx_print(t)
+    else
+      return nil, e
+    end
+  else
+    return nil, 'invalid response type: ' .. type(body)
+  end
+end
+
+function Router:print_error(body)
+  if type(body) == 'table' and #body == 1 and type(body[1]) == 'string' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'text/plain; charset=utf-8'
+    end
+    return ngx_print(body[1])
+  else
+    return self:print(body)
+  end
+end
+
+function Router:redirect(ctx, uri, code)
+  code = code or 302
+  return self:finish(ctx, code, ngx.redirect, uri, code)
+end
+
+function Router:exec(ctx, uri, args)
+  return self:finish(ctx, ngx.OK, ngx.exec, uri, args)
+end
+
+local function get_event_key(events, code)
+  if code == ngx.OK and events.ok then
+    return 'ok'
+  elseif code == 499 and events.abort then
+    return 'abort'
+  elseif code >= 100 and code <= 199 and events.info then
+    return 'info'
+  elseif code >= 200 and code <= 299 and events.success then
+    return 'success'
+  elseif code >= 300 and code <= 399 and events.redirect then
+    return 'redirect'
+  elseif code >= 400 and code <= 499 and events.client_error then
+    return 'client_error'
+  elseif code >= 500 and code <= 599 and events.server_error then
+    return 'server_error'
+  elseif code >= 400 and code <= 599 and events.error then
+    return 'error'
+  end
+end
+
+function Router:finish(ctx, code, ngx_func, ...)
+  local events = self.events
+  if events[code] then
+    self:emit(code, ctx)
+  else
+    local key = get_event_key(events, code)
+    if key then
+      self:emit(key, ctx)
+    end
+  end
+  for i = #ctx, 1, -1 do
+    local t = ctx[i]
+    ctx[i] = nil
+    resume(t)
+  end
+  return ngx_func(...)
+end
+
+function Router:run()
+  return self:dispatch(ngx_var.document_uri, ngx_var.request_method)
 end
 
 return Router

@@ -376,7 +376,8 @@ function Context.__index(self, key)
   elseif ngx_req[key] ~= nil then
     return ngx_req[key]
   elseif key == 'response' then
-    return setmetatable({}, Response)
+    self.response = setmetatable({}, Response)
+    return self.response
   elseif key == 'query' then
     self.query = ngx_req.get_uri_args()
     return rawget(self, 'query')
@@ -428,7 +429,7 @@ function Router:dispatch(path, method)
         return self:fail(ctx, err_or_okcode, errcode)
       elseif rawget(ctx, 'response') then
         local code = ctx.response.status or 200
-        return self:finish(ctx, code, ngx.exit, 0)
+        return self:echo(ctx, ctx.response.body, code)
       else
         return self:echo(ctx, 'no response', 500)
       end

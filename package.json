@@ -1,10 +1,10 @@
 {
   "name": "create-lua-resty-router",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "high performance router",
   "type": "module",
   "scripts": {
-    "rc:opm": "opm upload && opm clean dist",
+    "rc:opm": "opm upload  --ignore node_modules/ && opm clean dist",
     "prerc": "npm --no-git-tag-version version minor",
     "rc": "yarn push",
     "commit": "git add . && git commit -am ",
@@ -26,7 +26,7 @@
     "prepublishOnly": "pnpm build",
     "prepublishOnly2": "zx ./scripts/prepublish.mjs",
     "nginx": "nginx -p . -c conf/nginx.conf",
-    "test": "mv logs/error.log; yarn nginx -s stop;yarn nginx; ./test.py ; yarn nginx -s stop"
+    "test": "mv logs/error.log; kill -9 $(lsof -t -i:8080);yarn nginx; ./test.py ; yarn nginx -s stop"
   },
   "author": "",
   "license": "ISC",
