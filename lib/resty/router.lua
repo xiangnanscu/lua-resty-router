@@ -429,7 +429,11 @@ function Router:dispatch(path, method)
         return self:fail(ctx, err_or_okcode, errcode)
       elseif rawget(ctx, 'response') then
         local code = ctx.response.status or 200
-        return self:echo(ctx, ctx.response.body, code)
+        if ctx.response.body then
+          return self:echo(ctx, ctx.response.body, code)
+        else
+          return self:echo(ctx, 'no response', 500)
+        end
       else
         return self:echo(ctx, 'no response', 500)
       end

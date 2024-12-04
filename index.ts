@@ -73,73 +73,6 @@ function emptyDir(dir) {
   )
 }
 
-const LINE =
-  /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/gm
-
-// Parser src into an Object
-function parseEnv(src) {
-  const obj = {}
-
-  // Convert buffer to string
-  let lines = src.toString()
-
-  // Convert line breaks to same format
-  lines = lines.replace(/\r\n?/gm, '\n')
-
-  let match
-  while ((match = LINE.exec(lines)) != null) {
-    const key = match[1]
-
-    // Default undefined or null to empty string
-    let value = match[2] || ''
-
-    // Remove whitespace
-    value = value.trim()
-
-    // Check if double quoted
-    const maybeQuote = value[0]
-
-    // Remove surrounding quotes
-    value = value.replace(/^(['"`])([\s\S]*)\1$/gm, '$2')
-
-    // Expand newlines if double quoted
-    if (maybeQuote === '"') {
-      value = value.replace(/\\n/g, '\n')
-      value = value.replace(/\\r/g, '\r')
-    }
-
-    // Add to object
-    obj[key] = value
-  }
-
-  return obj
-}
-const envContext = parseEnv(
-  fs.readFileSync(path.resolve(__dirname, '.env'), { encoding: 'utf8' })
-)
-
-const normalizeArgv = (argv) => {
-  const d = {}
-  for (const key in argv) {
-    d[key.replace(/-/g, '_').toUpperCase()] = argv[key]
-  }
-  if (d.PROD) {
-    d.NODE_ENV = 'production'
-  } else {
-    d.NODE_ENV = 'development'
-  }
-  d.HTTPS = d.HTTPS ?? true
-  if (d.HTTPS) {
-    d.VITE_HTTPS = 'on'
-  }
-  if (d.HOST) {
-    d.VITE_HOST = d.HOST
-  } else {
-    d.HOST = envContext.VITE_HOST
-    d.VITE_HOST = d.HOST
-  }
-  return d
-}
 
 async function init() {
   console.log()
@@ -169,7 +102,7 @@ async function init() {
     // all arguments are treated as booleans
     boolean: true
   })
-  const normalizedArgv = normalizeArgv(argv)
+  const normalizedArgv = argv
 
   // if any of the feature flags is set, we would skip the feature prompts
   const isFeatureFlagsUsed =
@@ -309,7 +242,6 @@ async function init() {
   render('.')
 
   // add dynamic scritps block
-  const HOST = normalizedArgv.HOST
   const packageJsonPath = path.resolve(root, 'package.json')
   const existingPkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
   const updatedPkg = sortDependencies(
@@ -320,7 +252,7 @@ async function init() {
       }
     })
   )
-  console.log({ argv, normalizedArgv, targetDir, projectName })
+  // console.log({ argv, normalizedArgv, targetDir, projectName })
   fs.writeFileSync(packageJsonPath, JSON.stringify(updatedPkg, null, 2) + '\n', 'utf-8')
 
   // An external data store for callbacks to share data
@@ -417,20 +349,22 @@ async function init() {
     })
   )
 
-  console.log(`\nDone. Now run:\n`)
+  console.log(`\nDone. to start the server, run:\n`)
   if (root !== cwd) {
     const cdProjectName = path.relative(cwd, root)
     console.log(
       `  ${bold(green(`cd ${cdProjectName.includes(' ') ? `"${cdProjectName}"` : cdProjectName}`))}`
     )
   }
-  console.log(`  ${bold(green(getCommand(packageManager, 'init-github')))}`)
-  console.log(`  ${bold(green(getCommand(packageManager, 'install')))}`)
+  // console.log(`  ${bold(green(getCommand(packageManager, 'init-github')))}`)
+  // console.log(`  ${bold(green(getCommand(packageManager, 'install')))}`)
   if (needsPrettier) {
-    console.log(`  ${bold(green(getCommand(packageManager, 'format')))}`)
+    // console.log(`  ${bold(green(getCommand(packageManager, 'format')))}`)
   }
-  console.log(`  ${bold(green(getCommand(packageManager, 'dev')))}`)
+  console.log(`  ${bold(green(getCommand(packageManager, 'start')))}`)
   console.log()
+  console.log(`to stop the server, run:\n`)
+  console.log(`  ${bold(green(getCommand(packageManager, 'stop')))}`)
 }
 
 init().catch((e) => {

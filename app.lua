@@ -113,7 +113,7 @@ end)
 router:get("/func", function(ctx)
   return function()
     ngx.header.content_type = 'text/plain; charset=utf-8'
-    ngx.say("function called2")
+    ngx.print("function called")
   end
 end)
 
@@ -125,6 +125,11 @@ end)
 
 router:get("/events", function(ctx)
   return ctx.cnt
+end)
+
+-- 12. ctx.response.body
+router:get("/response-body", function(ctx)
+  ctx.response.body = "response body"
 end)
 
 return router

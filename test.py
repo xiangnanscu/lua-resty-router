@@ -25,6 +25,7 @@ def test_endpoint(
     expected_code: int = 200,
     expected_response: Optional[Union[str, dict, list]] = None,
     expected_content_type: Optional[str] = None,
+    expected_substring: Optional[str] = None,
 ) -> None:
     """
     Test a single endpoint
@@ -36,6 +37,7 @@ def test_endpoint(
         expected_response: Expected response content. Can be:
             - string: for substring matching
             - dict/list: for complete JSON matching
+        expected_substring: Expected substring in response content (optional)
         expected_content_type: Expected Content-Type (optional)
     """
     test_stats['total'] += 1
@@ -92,13 +94,13 @@ def test_endpoint(
         else:
             actual_text = response.text
             if isinstance(expected_response, str):
-                if expected_response in actual_text:
+                if expected_response == actual_text:
                     print(f"{GREEN}✓ Test passed{NC}")
                     test_stats['passed'] += 1
                 else:
                     print(f"{RED}✗ Response content mismatch{NC}")
-                    print(f"Expected: {expected_response}")
-                    print(f"Got: {actual_text}")
+                    print(f"Expected: {repr(expected_response)}")
+                    print(f"Got: {repr(actual_text)}")
                     test_stats['failed'] += 1
             else:
                 print(f"{RED}✗ Response type mismatch{NC}")
@@ -157,7 +159,7 @@ def run_tests():
     # 7. Test error handling
     test_endpoint("/error",
                  expected_code=500,
-                 expected_response="Test Error")
+                 expected_substring="Test Error")
     test_endpoint("/custom-error",
                  expected_code=500,
                  expected_response={"code": 400, "message": "Custom Error"},
@@ -188,6 +190,9 @@ def run_tests():
     # 11. Test events
     test_endpoint("/add", expected_response=1)
     test_endpoint("/events", expected_response=1)
+
+    # 12. Test ctx.response.body
+    test_endpoint("/response-body", expected_response="response body")
 
 if __name__ == "__main__":
     try:
