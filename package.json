@@ -26,7 +26,7 @@
     "prepublishOnly": "pnpm build",
     "prepublishOnly2": "zx ./scripts/prepublish.mjs",
     "nginx": "nginx -p . -c conf/nginx.conf",
-    "test": "yarn nginx; ./test.sh ; yarn nginx -s stop"
+    "test": "mv logs/error.log; yarn nginx -s stop;yarn nginx; ./test.py ; yarn nginx -s stop"
   },
   "author": "",
   "license": "ISC",

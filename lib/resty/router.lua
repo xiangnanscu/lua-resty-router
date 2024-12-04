@@ -393,7 +393,6 @@ end
 ---@param path string
 ---@param method string
 ---@return boolean
----@overload fun(string, string): boolean
 function Router:dispatch(path, method)
   -- before plugins
   local ctx = self:create_context()
@@ -412,13 +411,13 @@ function Router:dispatch(path, method)
   -- match route
   local handler, params_or_code = self:match(path, method)
   if handler == nil then
-    return self:fail(ctx, 'match route failed', params_or_code)
+    return self:echo(ctx, 'match route failed', params_or_code --[[@as number]])
   end
   if params_or_code then
     ctx.params = params_or_code
   end
   if type(handler) == 'string' then
-    return self:ok(ctx, handler)
+    return self:echo(ctx, handler, 200)
   else
     ---@diagnostic disable-next-line: param-type-mismatch
     local ok, result, err_or_okcode, errcode = xpcall(handler, trace_back, ctx)
@@ -429,53 +428,94 @@ function Router:dispatch(path, method)
         return self:fail(ctx, err_or_okcode, errcode)
       elseif rawget(ctx, 'response') then
         local code = ctx.response.status or 200
-        return self:finish(ctx, code, ngx.exit, code)
+        return self:finish(ctx, code, ngx.exit, 0)
       else
-        return self:fail(ctx, 'no response')
+        return self:echo(ctx, 'no response', 500)
       end
+    elseif type(result) ~= 'function' then
+      return self:echo(ctx, result, err_or_okcode or 200)
     else
-      local resp_type = type(result)
-      if resp_type == 'table' or resp_type == 'boolean' or resp_type == 'number' then
-        local response_json, encode_err = encode(result)
-        if not response_json then
-          return self:fail(ctx, encode_err)
-        else
-          ngx_header.content_type = 'application/json; charset=utf-8'
-          return self:ok(ctx, response_json, err_or_okcode)
-        end
-      elseif resp_type == 'string' then
-        if byte(result) == 60 then -- 60 is ASCII value of '<'
-          ngx_header.content_type = 'text/html; charset=utf-8'
-        else
-          ngx_header.content_type = 'text/plain; charset=utf-8'
-        end
-        return self:ok(ctx, result, err_or_okcode)
-      elseif type(result) == 'function' then
-        ok, result, err_or_okcode, errcode = xpcall(result, trace_back, ctx)
-        if not ok then
-          return self:fail(ctx, result)
-        elseif result == nil then
-          return self:finish(ctx, 500, ngx.exit, 500)
-        else
-          return self:finish(ctx, 200, ngx.exit, 200)
-        end
+      ok, result = xpcall(result, trace_back, ctx)
+      if not ok then
+        return self:fail(ctx, result)
       else
-        return self:fail(ctx, 'invalid response type: ' .. resp_type)
+        return self:finish(ctx, 200, ngx.exit, 0)
       end
     end
   end
 end
 
-function Router:ok(ctx, body, code)
-  ngx_print(body)
-  code = code or 200
-  return self:finish(ctx, code, ngx.exit, code)
+---success response
+---@param ctx table request context
+---@param body string response body
+---@param code number response code
+---@return unknown
+function Router:echo(ctx, body, code)
+  ngx.status = code
+  local res, err = self:print(body)
+  if res == nil then
+    return self:fail(ctx, err)
+  else
+    return self:finish(ctx, code, ngx.exit, 0)
+  end
 end
 
+---failed response
+---@param ctx table request context
+---@param err string|table error message
+---@param code? number error code
+---@return unknown
 function Router:fail(ctx, err, code)
-  ngx_print(err)
   code = code or 500
-  return self:finish(ctx, code, ngx.exit, code)
+  ngx.status = code
+  self:print_error(err)
+  return self:finish(ctx, code, ngx.exit, 0)
+end
+
+function Router:print(body)
+  if type(body) == 'string' then
+    if not ngx_header.content_type then
+      if byte(body) == 60 then -- 60 is ASCII value of '<'
+        ngx_header.content_type = 'text/html; charset=utf-8'
+      else
+        ngx_header.content_type = 'text/plain; charset=utf-8'
+      end
+    end
+    return ngx_print(body)
+  elseif type(body) == 'number' or type(body) == 'boolean' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'application/json; charset=utf-8'
+    end
+    local t, e = encode(body)
+    if t then
+      return ngx_print(t)
+    else
+      return nil, e
+    end
+  elseif type(body) == 'table' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'application/json; charset=utf-8'
+    end
+    local t, e = encode(body)
+    if t then
+      return ngx_print(t)
+    else
+      return nil, e
+    end
+  else
+    return nil, 'invalid response type: ' .. type(body)
+  end
+end
+
+function Router:print_error(body)
+  if type(body) == 'table' and #body == 1 and type(body[1]) == 'string' then
+    if not ngx_header.content_type then
+      ngx_header.content_type = 'text/plain; charset=utf-8'
+    end
+    return ngx_print(body[1])
+  else
+    return self:print(body)
+  end
 end
 
 function Router:redirect(ctx, uri, code)
