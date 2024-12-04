@@ -1,6 +1,6 @@
 {
-  "name": "create-lua-resty-router",
-  "version": "0.1.0",
+  "name": "create-lua-resty-router-tmp",
+  "version": "0.2.0",
   "description": "high performance router",
   "type": "module",
   "bin": {
