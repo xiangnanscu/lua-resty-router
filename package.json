@@ -1,10 +1,10 @@
 {
   "name": "create-lua-resty-router-tmp",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "high performance router",
   "type": "module",
   "bin": {
-    "create-easyvue": "outfile.cjs"
+    "create-lua-resty-router-tmp": "outfile.cjs"
   },
   "files": [
     "outfile.cjs",
