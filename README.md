@@ -165,8 +165,8 @@ end)
 
 -- 11. Check if events are executing properly
 router:get("/add", function(ctx)
-  cnt = cnt + 1
-  return cnt
+  router:emit('add')
+  return ctx.cnt
 end)
 
 router:get("/events", function(ctx)

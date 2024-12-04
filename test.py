@@ -188,7 +188,7 @@ def run_tests():
     test_endpoint("/func", expected_response="function called")
 
     # 11. Test events
-    test_endpoint("/add", expected_response=1)
+    test_endpoint("/add", expected_response=0)
     test_endpoint("/events", expected_response=1)
 
     # 12. Test ctx.response.body
