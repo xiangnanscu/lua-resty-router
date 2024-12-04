@@ -4,6 +4,8 @@ Elegant, performant and productive router for Openresty.
 
 # Quick Start
 
+It's recommended to use npm to scaffold a lua-resty-router project.
+
 ```bash
 npm create lua-resty-router@latest
 ```

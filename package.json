@@ -11,7 +11,7 @@
     "template"
   ],
   "scripts": {
-    "rc:opm": "opm upload  --ignore node_modules/ && opm clean dist",
+    "upload": "opm upload  --ignore node_modules/ && opm clean dist",
     "prerc": "npm --no-git-tag-version version minor",
     "rc": "yarn push",
     "commit": "git add . && git commit -am ",
