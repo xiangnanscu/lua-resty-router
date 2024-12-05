@@ -1,10 +1,10 @@
 {
-  "name": "create-lua-resty-router-tmp",
-  "version": "0.4.0",
+  "name": "create-resty-app",
+  "version": "0.5.0",
   "description": "high performance router",
   "type": "module",
   "bin": {
-    "create-lua-resty-router-tmp": "outfile.cjs"
+    "create-resty-app": "outfile.cjs"
   },
   "files": [
     "outfile.cjs",
@@ -29,11 +29,11 @@
     "format": "prettier --write .",
     "build": "zx ./scripts/build.mjs",
     "snapshot": "zx ./scripts/snapshot.mjs",
-    "pretest2": "run-s build snapshot",
+    "pretest": "rm -f logs/error.log; lsof -t -i:8080 | xargs kill -9 || true",
     "prepublishOnly": "npm run build",
     "prepublishOnly2": "zx ./scripts/prepublish.mjs",
     "nginx": "nginx -p . -c conf/nginx.conf",
-    "test": "mv logs/error.log; kill -9 $(lsof -t -i:8080);yarn nginx; ./test.py ; yarn nginx -s stop"
+    "test": "yarn nginx; ./test.py ; yarn nginx -s stop"
   },
   "author": "",
   "license": "ISC",

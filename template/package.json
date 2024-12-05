@@ -12,7 +12,9 @@
     "postpush": "uname -s | grep -q Darwin && yarn _push || while true; do timeout 10 yarn _push && break; done",
     "pull": "uname -s | grep -q Darwin && yarn _pull || while true; do timeout 10 yarn _pull && break; done",
     "nginx": "nginx -c conf/nginx.conf -p .",
+    "prestart": "mkdir -p logs",
     "start": "yarn nginx",
+    "poststart": "echo 'server is running at http://localhost:8080'",
     "stop": "yarn nginx -s stop",
     "reload": "yarn nginx -s reload"
   }

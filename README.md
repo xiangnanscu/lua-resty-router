@@ -7,20 +7,20 @@ Elegant, performant and productive router for Openresty.
 It's recommended to use npm to scaffold a lua-resty-router project.
 
 ```bash
-npm create lua-resty-router@latest
+npm create resty-app@latest
 ```
+Then follow the instructions to complete the project.
 
 # Api
 
-## create
+## new
 
 ```lua
----@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
-(method) Router:create(routes: Route[])
+(method) Router:new()
   -> Router
 ```
 
-init a router with routes
+create a router.
 
 ## insert
 
@@ -29,7 +29,17 @@ init a router with routes
   -> Router
 ```
 
-insert a route
+insert a route.
+
+## extend
+
+```lua
+---@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
+(method) Router:extend(routes: Route[])
+  -> Router
+```
+
+insert routes to a router.
 
 ## match
 

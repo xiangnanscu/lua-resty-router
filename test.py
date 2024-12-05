@@ -194,6 +194,57 @@ def run_tests():
     # 12. Test ctx.response.body
     test_endpoint("/response-body", expected_response="response body")
 
+    # 13. Test fs
+    test_endpoint("/account/users", expected_response=[{"id": 1, "name": "Alice"}, {"id": 2, "name": "Bob"}])
+
+    # Test array-style route definitions
+    test_endpoint("/array_group/bloggers",
+                 expected_response=[
+                     {"id": 1, "name": "Alice"},
+                     {"id": 2, "name": "Bob"}
+                 ],
+                 expected_content_type="application/json")
+
+    test_endpoint("/array_group/bloggers/Alice",
+                 expected_response={"name": "Alice"},
+                 expected_content_type="application/json")
+
+    test_endpoint("/array_group/bloggers/123/posts",
+                 expected_response={
+                     "user_id": 123,
+                     "posts": [
+                         {"id": 1, "title": "Post 1"},
+                         {"id": 2, "title": "Post 2"}
+                     ]
+                 },
+                 expected_content_type="application/json")
+
+    # Test hash-style route definitions
+    test_endpoint("/hash_group/list",
+                 expected_response=[
+                     {"id": 1, "type": "item1"},
+                     {"id": 2, "type": "item2"}
+                 ],
+                 expected_content_type="application/json")
+
+    test_endpoint("/hash_group/detail/42",
+                 expected_response={
+                     "id": 42,
+                     "type": "detail",
+                     "description": "Item details"
+                 },
+                 expected_content_type="application/json")
+
+    test_endpoint("/hash_group/search/test",
+                 expected_response={
+                     "keyword": "test",
+                     "results": [
+                         {"id": 1, "match": True},
+                         {"id": 2, "match": False}
+                     ]
+                 },
+                 expected_content_type="application/json")
+
 if __name__ == "__main__":
     try:
         run_tests()

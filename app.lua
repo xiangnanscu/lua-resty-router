@@ -132,4 +132,7 @@ router:get("/response-body", function(ctx)
   ctx.response.body = "response body"
 end)
 
+router:fs("./api")
+
+assert(io.open("logs/router.log", "w")):write(require("resty.repr")(router)):close()
 return router

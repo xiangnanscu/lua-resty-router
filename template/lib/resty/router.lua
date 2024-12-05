@@ -1,29 +1,35 @@
-local json           = require "cjson.safe"
-local bit            = bit
-local gmatch         = string.gmatch
-local ipairs         = ipairs
-local tonumber       = tonumber
-local byte           = string.byte
-local ngx_re_match   = ngx.re.match
-local coroutine      = coroutine
-local resume         = coroutine.resume
-local trace_back     = debug.traceback
-local ngx            = ngx
-local ngx_header     = ngx.header
-local ngx_print      = ngx.print
-local ngx_var        = ngx.var
-local string_format  = string.format
-local xpcall         = xpcall
-local spawn          = ngx.thread.spawn
-local ngx_req        = ngx.req
-local decode         = json.decode
-local encode         = json.encode
-local get_post_args  = ngx.req.get_post_args
-local read_body      = ngx.req.read_body
-local get_body_data  = ngx.req.get_body_data
-local assert         = assert
-local rawget         = rawget
-local setmetatable   = setmetatable
+local json          = require "cjson.safe"
+local bit           = bit
+local gmatch        = string.gmatch
+local ipairs        = ipairs
+local tonumber      = tonumber
+local byte          = string.byte
+local ngx_re_match  = ngx.re.match
+local coroutine     = coroutine
+local resume        = coroutine.resume
+local trace_back    = debug.traceback
+local ngx           = ngx
+local ngx_header    = ngx.header
+local ngx_print     = ngx.print
+local ngx_var       = ngx.var
+local string_format = string.format
+local xpcall        = xpcall
+local spawn         = ngx.thread.spawn
+local ngx_req       = ngx.req
+local decode        = json.decode
+local encode        = json.encode
+local get_post_args = ngx.req.get_post_args
+local read_body     = ngx.req.read_body
+local get_body_data = ngx.req.get_body_data
+local assert        = assert
+local rawget        = rawget
+local setmetatable  = setmetatable
+local lfs
+do
+  local o, l = pcall(require, "syscall.lfs")
+  if not o then o, l = pcall(require, "lfs") end
+  if o then lfs = l end
+end
 
 local method_bitmask = {
   GET = 1,       -- 2^0
@@ -201,24 +207,23 @@ function Router:is_route(view)
   return self:is_handler(view[2])
 end
 
----init a router with routes
+---insert routes to a router
 ---@param routes Route[]
 ---@return Router
-function Router:create(routes)
-  local tree = Router:new()
+function Router:extend(routes)
   for _, route in ipairs(routes) do
     assert(self:is_route(route))
     local path = route[1]
     if type(path) == 'string' then
-      tree:_insert(path, route[2], route[3])
+      self:_insert(path, route[2], route[3])
     else
       for _, p in ipairs(path) do
-        tree:_insert(p, route[2], route[3])
+        self:_insert(p, route[2], route[3])
       end
     end
   end
-  _set_find_method(tree)
-  return tree
+  _set_find_method(self)
+  return self
 end
 
 ---@param path string|table
@@ -572,6 +577,90 @@ end
 
 function Router:run()
   return self:dispatch(ngx_var.document_uri, ngx_var.request_method)
+end
+
+local function callable(handler)
+  return type(handler) == "function" or
+      (type(handler) == "table" and getmetatable(handler) and getmetatable(handler).__call)
+end
+
+local function is_handler(handler)
+  return type(handler) == "string" or callable(handler)
+end
+
+---@param dir string Directory path to scan
+---@param base_path? string Base path (used for recursion)
+---@return table[] Route configuration array
+function Router:collect_routes(dir, base_path)
+  local routes = {}
+  base_path = base_path or ""
+
+  -- Recursively scan directory
+  for file in lfs.dir(dir) do
+    if file ~= "." and file ~= ".." then
+      local path = dir .. "/" .. file
+      local attr = lfs.attributes(path)
+
+      if attr.mode == "directory" then
+        -- Process subdirectories recursively
+        local sub_routes = self:collect_routes(path, base_path .. "/" .. file)
+        for _, route in ipairs(sub_routes) do
+          routes[#routes + 1] = route
+        end
+      elseif attr.mode == "file" and file:match("%.lua$") then
+        -- Process .lua files
+        local module_path = path:gsub("%.lua$", ""):gsub("/", ".")
+        local ok, route = pcall(require, module_path)
+        if ok then
+          -- Get relative path (remove .lua extension)
+          local relative_path = base_path .. "/" .. file:gsub("%.lua$", "")
+
+          -- Handle different types of route definitions
+          if is_handler(route) then
+            -- Type 1: Function or callable table
+            routes[#routes + 1] = { relative_path, route }
+          elseif type(route) == "table" then
+            if #route > 0 then
+              if type(route[1]) == "string" and is_handler(route[2]) then
+                -- Type 2: Single route definition
+                local path = route[1]
+                if path:sub(1, 1) == "/" then
+                  routes[#routes + 1] = { path, route[2], route[3] }
+                else
+                  routes[#routes + 1] = { relative_path .. "/" .. path, route[2], route[3] }
+                end
+              else
+                -- Type 3: Array of multiple route definitions
+                for _, view in ipairs(route) do
+                  if type(view[1]) == "string" and is_handler(view[2]) then
+                    if view[1]:sub(1, 1) == "/" then
+                      routes[#routes + 1] = { view[1], view[2], view[3] }
+                    else
+                      routes[#routes + 1] = { relative_path .. "/" .. view[1], view[2], view[3] }
+                    end
+                  end
+                end
+              end
+            else
+              -- Type 4: Map-style route definitions
+              for key, handler in pairs(route) do
+                if type(key) == "string" and key:sub(1, 1) ~= "/" and is_handler(handler) then
+                  routes[#routes + 1] = { relative_path .. "/" .. key, handler }
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
+  return routes
+end
+
+function Router:fs(dir)
+  local routes = self:collect_routes(dir)
+  self:extend(routes)
 end
 
 return Router
