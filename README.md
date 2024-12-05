@@ -7,7 +7,7 @@ Elegant, performant and productive router for Openresty.
 It's recommended to use npm to scaffold a lua-resty-router project.
 
 ```bash
-npm create resty-app@latest
+npm create resty-app@latest -y
 ```
 Then follow the instructions to complete the project.
 
