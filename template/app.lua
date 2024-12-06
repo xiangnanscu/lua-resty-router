@@ -71,6 +71,7 @@ router:get('/', function(ctx)
         <div class="container">
           <h1>🎉🎉🎉🎉 Congratulations!</h1>
           <p>Your resty application is running</p>
+          <p>Here are some example routes (requires `lfs` or `syscall.lfs` module):</p>
           <div class="api-list">
             <div class="api-item">
               <a href="/test/hello"><span class="method">GET</span> /test/hello - Simple String Response</a>
@@ -101,6 +102,8 @@ router:get('/', function(ctx)
 end)
 
 -- add routes from lua files in api folder
-router:fs('./api')
+if pcall(require, "syscall.lfs") or pcall(require, "lfs") then
+  router:fs('./api')
+end
 
 return router

@@ -11,45 +11,10 @@ npm create resty-app@latest -y
 ```
 Then follow the instructions to complete the project.
 
-# Api
+# Dependencies
 
-## new
-
-```lua
-(method) Router:new()
-  -> Router
-```
-
-create a router.
-
-## insert
-
-```lua
-(method) Router:insert(path: string, handler: string|function, methods?: string|string[])
-  -> Router
-```
-
-insert a route.
-
-## extend
-
-```lua
----@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
-(method) Router:extend(routes: Route[])
-  -> Router
-```
-
-insert routes to a router.
-
-## match
-
-```lua
-(method) Router:match(path: string, method: string)
-  -> string|function
-  2. { [string]: string|number }?
-```
-
-match a http request
+* [OpenResty](https://openresty.org/)
+* (Optional) [lfs](https://luarocks.org/modules/hisham/luafilesystem) or [syscall.lfs](https://github.com/justincormack/ljsyscall) - if you want to use `fs` method to load routes from directory
 
 # Synopsis
 
@@ -62,6 +27,7 @@ local cnt = 0
 local error_cnt = 0
 
 -- Test events
+-- for test purpose, assume the nginx is single-threaded
 router:on('add', function(ctx)
   cnt = cnt + 1
 end)
@@ -169,7 +135,7 @@ end)
 router:get("/func", function(ctx)
   return function()
     ngx.header.content_type = 'text/plain; charset=utf-8'
-    ngx.say("function called2")
+    ngx.say("function called")
   end
 end)
 
@@ -186,6 +152,64 @@ end)
 return router
 
 ```
-## reference
+
+# Api
+
+## new
+
+```lua
+(method) Router:new()
+  -> Router
+```
+
+create a router.
+
+## insert
+
+```lua
+(method) Router:insert(path: string, handler: string|function, methods?: string|string[])
+  -> Router
+```
+
+insert a route.
+
+## extend
+
+```lua
+---@alias Route {[1]:string, [2]:function|string, [3]?:string|string[]}
+(method) Router:extend(routes: Route[])
+  -> Router
+```
+
+insert routes to a router.
+
+## match
+
+```lua
+(method) Router:match(path: string, method: string)
+  ->
+  1. string|function
+  2. { [string]: string|number }?
+```
+
+match a http request
+
+## run
+```lua
+(method) Router:run()
+  -> nil
+```
+dispatch http request
+
+## fs
+
+```lua
+(method) Router:fs(dir: string)
+  -> nil
+```
+
+load routes from directory (requires `lfs` or `syscall.lfs` module).
+
+# reference
 
 - [nginx api for lua](https://github.com/openresty/lua-nginx-module?tab=readme-ov-file#nginx-api-for-lua)
