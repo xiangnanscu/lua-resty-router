@@ -1,6 +1,6 @@
 {
   "name": "create-resty-app",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "high performance router",
   "type": "module",
   "bin": {
@@ -10,6 +10,14 @@
     "outfile.cjs",
     "template"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiangnanscu/lua-resty-router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiangnanscu/lua-resty-router/issues"
+  },
+  "homepage": "https://github.com/xiangnanscu/lua-resty-router",
   "scripts": {
     "upload": "opm upload  --ignore node_modules/ && opm clean dist",
     "prerc": "npm --no-git-tag-version version minor",
