@@ -1,10 +1,10 @@
 {
-  "name": "create-resty-app",
+  "name": "create-resty",
   "version": "0.7.0",
   "description": "high performance router",
   "type": "module",
   "bin": {
-    "create-resty-app": "outfile.cjs"
+    "create-resty": "outfile.cjs"
   },
   "files": [
     "outfile.cjs",
